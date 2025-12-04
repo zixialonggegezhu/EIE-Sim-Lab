@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单管共射放大电路虚拟仿真 (Dual Mode)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Environment Shim -->
+    <script>
+      window.process = { env: { NODE_ENV: 'production' } };
+    </script>
+
+    <!-- React Dependencies -->
+    <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- Recharts -->
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js"></script>
+    
+    <!-- Babel -->
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind Config -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+              serif: ['Roboto Serif', 'serif'],
+            },
+            colors: {
+              scope: {
+                bg: '#1a1b1e',
+                grid: '#2c2e33',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    
+    <style>
+      body {
+        background-color: #f8f9fa;
+        color: #212529;
+      }
+      .friendly-range {
+        -webkit-appearance: none; 
+        background: transparent; 
+      }
+      .friendly-range::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        background: #3b82f6;
+        cursor: pointer;
+        margin-top: -8px; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      }
+      .friendly-range::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        cursor: pointer;
+        background: #dee2e6;
+        border-radius: 2px;
+      }
+      
+      .std-range {
+         -webkit-appearance: none;
+         background: transparent;
+      }
+      .std-range::-webkit-slider-thumb {
+         -webkit-appearance: none;
+         background: #4b5563; 
+         border: 1px solid #1f2937;
+         width: 12px;
+         height: 20px;
+         margin-top: -8px;
+         cursor: pointer;
+      }
+      .std-range::-webkit-slider-runnable-track {
+         width: 100%;
+         height: 4px;
+         background: #d1d5db; 
+         border-radius: 0;
+      }
+      /* Animation for collapse */
+      .collapse-content {
+          transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+          overflow: hidden;
+      }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
+      }
+    }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+        const Recharts = window.Recharts;
+        
+        if (!Recharts) {
+            document.getElementById('root').innerHTML = '<div style="padding:20px; color:red;">Recharts load failed.</div>';
+            throw new Error("Recharts not loaded");
+        }
+
+        const { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip } = Recharts;
+
+        // Constants
+        const VCC = 12;
+        const GND = 0;
+        const MIN_BIAS = 0, MAX_BIAS = 12;
+        const MIN_AMP = 0.01, MAX_AMP = 2.0;
+        const MIN_GAIN = 1, MAX_GAIN = 10;
+        const SAMPLE_POINTS = 100;
+        const CYCLES = 2;
+
+        const DistortionType = {
+            None: 'NONE',
+            Saturation: 'SATURATION',
+            Cutoff: 'CUTOFF',
+            Both: 'BOTH'
+        };
+
+        // Physics Logic
+        const useSimulation = (state) => {
+             return useMemo(() => {
+                const newData = [];
+                const points = SAMPLE_POINTS;
+                let maxVoutRaw = -Infinity;
+                let minVoutRaw = Infinity;
+
+                for (let i = 0; i <= points; i++) {
+                    const t = (i / points) * CYCLES * 2 * Math.PI;
+                    const vin = state.amplitude * Math.sin(t);
+                    const vout_raw = state.bias - (state.gain * vin);
+                    const vout = Math.max(GND, Math.min(VCC, vout_raw));
+                    maxVoutRaw = Math.max(maxVoutRaw, vout_raw);
+                    minVoutRaw = Math.min(minVoutRaw, vout_raw);
+                    newData.push({ time: i, vin: vin, vout, vout_raw });
+                }
+
+                let status;
+                const isTopClipped = maxVoutRaw > VCC + 0.05; 
+                const isBottomClipped = minVoutRaw < GND - 0.05;
+
+                if (isTopClipped && isBottomClipped) {
+                    status = { type: DistortionType.Both, message: "⚠️ 双向失真", longMessage: "⚠️ 双向失真！信号过大。", color: "border-red-500 text-red-700 bg-red-50", stdColor: "text-red-600 bg-red-50 border-red-200" };
+                } else if (isTopClipped) {
+                    status = { type: DistortionType.Cutoff, message: "⚠️ 截止失真", longMessage: "⚠️ 截止失真！Q点过高。", color: "border-orange-500 text-orange-700 bg-orange-50", stdColor: "text-orange-600 bg-orange-50 border-orange-200" };
+                } else if (isBottomClipped) {
+                    status = { type: DistortionType.Saturation, message: "⚠️ 饱和失真", longMessage: "⚠️ 饱和失真！Q点过低。", color: "border-orange-500 text-orange-700 bg-orange-50", stdColor: "text-orange-600 bg-orange-50 border-orange-200" };
+                } else {
+                    status = { type: DistortionType.None, message: "✅ 线性放大区", longMessage: "✅ 状态良好：线性放大区。", color: "border-green-500 text-green-700 bg-green-50", stdColor: "text-green-700 bg-green-50 border-green-200" };
+                }
+                return { data: newData, diagnostic: status };
+            }, [state]);
+        }
+
+        // --- NEW COMPONENT: Real Lab Scene Image ---
+        // ⚠️ 请确保你的图片命名为 lab_scene.jpg 并且放在同一个文件夹下
+        const RealLabScene = () => {
+            const [isOpen, setIsOpen] = useState(false); // 默认折叠，改为 true 则默认展开
+
+            return (
+                <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-6">
+                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                        {/* Title Bar (Clickable) */}
+                        <button 
+                            onClick={() => setIsOpen(!isOpen)}
+                            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">📸</span>
+                                <span className="font-bold text-gray-700">本系统模拟的实验真实操作场景</span>
+                                <span className="text-xs text-gray-400 font-mono bg-gray-200 px-2 py-0.5 rounded">
+                                    {isOpen ? '收起' : '展开查看'}
+                                </span>
+                            </div>
+                            {/* Arrow Icon */}
+                            <svg 
+                                className={`w-5 h-5 text-gray-500 transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} 
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        {/* Image Content (Collapsible) */}
+                        <div 
+                            className={`collapse-content bg-black flex justify-center items-center ${isOpen ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}
+                        >
+                            {/* 
+                                ⚠️ 这里引用的图片名为 lab_scene.jpg 
+                                如果你的图片是 png，请改为 lab_scene.png
+                            */}
+                            <img 
+                                src="./lab_scene.jpg" 
+                                alt="实验室真实操作场景" 
+                                className="max-w-full h-auto object-contain max-h-[600px]"
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.parentElement.innerHTML = '<div class="p-8 text-gray-400 text-center">❌ 图片加载失败<br/><span class="text-sm">请确认图片文件名为 <b>lab_scene.jpg</b> 且与html在同一目录</span></div>';
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ... Existing Components ...
+        const GuidePanel = () => (
+            <div className="bg-slate-800 text-slate-200 p-6 rounded-xl shadow-lg h-full">
+                <h3 className="text-xl font-bold text-white mb-6 border-b border-slate-600 pb-2">🧪 实验操作指南</h3>
+                <div className="space-y-6">
+                    <div className="relative pl-6 border-l-2 border-blue-500">
+                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-blue-500"></div>
+                        <h4 className="font-bold text-white">第 1 步：设置输入</h4>
+                        <p className="text-sm text-slate-400 mt-1">调节 <span className="text-blue-300 font-mono">输入信号幅度</span>。</p>
+                    </div>
+                    <div className="relative pl-6 border-l-2 border-purple-500">
+                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500"></div>
+                        <h4 className="font-bold text-white">第 2 步：调节 Q 点</h4>
+                        <p className="text-sm text-slate-400 mt-1">调节 <span className="text-purple-300 font-mono">静态工作点 (Bias)</span>。</p>
+                    </div>
+                    <div className="relative pl-6 border-l-2 border-green-500">
+                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-green-500"></div>
+                        <h4 className="font-bold text-white">第 3 步：观察失真</h4>
+                        <p className="text-sm text-slate-400 mt-1">观察波形削顶或削底现象。</p>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const DiagnosticPanel = ({ status }) => {
+            const getIcon = () => (status.type === DistortionType.None ? "✅" : "⚠️");
+            return (
+                <div className={`flex items-center gap-3 p-4 rounded-lg border-l-4 shadow-sm transition-colors duration-300 ${status.color}`}>
+                    <div className="text-2xl">{getIcon()}</div>
+                    <div>
+                        <h4 className="font-bold text-lg">系统状态诊断</h4>
+                        <p className="text-sm font-medium">{status.longMessage}</p>
+                    </div>
+                </div>
+            );
+        };
+
+        const FriendlyOscilloscope = ({ data }) => (
+            <div className="w-full h-[300px] md:h-[400px] bg-scope-bg rounded-lg shadow-inner border-4 border-gray-700 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none z-10 rounded-lg"></div>
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                        <CartesianGrid stroke="#2c2e33" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="time" type="number" hide domain={['dataMin', 'dataMax']} />
+                        <YAxis domain={[-2, 14]} tickCount={8} stroke="#868e96" tick={{ fontSize: 12, fill: '#868e96' }} width={40} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#495057', color: '#f8f9fa' }} itemStyle={{ fontSize: '12px' }} labelStyle={{ display: 'none' }} formatter={(value) => value.toFixed(2) + ' V'} />
+                        <ReferenceLine y={VCC} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Vcc (12V)', fill: '#ef4444', fontSize: 12, position: 'insideTopRight' }} />
+                        <ReferenceLine y={GND} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'GND (0V)', fill: '#ef4444', fontSize: 12, position: 'insideBottomRight' }} />
+                        <Line type="monotone" dataKey="vin" stroke="#ffd43b" strokeWidth={2} dot={false} name="输入 (Vin)" isAnimationActive={false} />
+                        <Line type="monotone" dataKey="vout" stroke="#51cf66" strokeWidth={3} dot={false} name="输出 (Vout)" isAnimationActive={false} />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+        );
+
+        const FriendlyControl = ({ values, onChange }) => (
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🕹️ 电路参数控制</h3>
+                <div className="space-y-6">
+                    <div>
+                        <div className="flex justify-between mb-1"><label className="text-sm font-medium text-gray-700">1. 输入信号幅度 (Vin)</label><span className="text-sm font-mono text-blue-600 bg-blue-50 px-2 rounded">{values.amplitude.toFixed(2)} V</span></div>
+                        <input type="range" min={MIN_AMP} max={MAX_AMP} step={0.1} value={values.amplitude} onChange={(e) => onChange('amplitude', parseFloat(e.target.value))} className="friendly-range w-full" />
+                    </div>
+                    <div>
+                        <div className="flex justify-between mb-1"><label className="text-sm font-medium text-gray-700">2. 静态工作点 (Bias)</label><span className="text-sm font-mono text-purple-600 bg-purple-50 px-2 rounded">{values.bias.toFixed(1)} V</span></div>
+                        <input type="range" min={MIN_BIAS} max={MAX_BIAS} step={0.1} value={values.bias} onChange={(e) => onChange('bias', parseFloat(e.target.value))} className="friendly-range w-full" />
+                    </div>
+                    <div>
+                        <div className="flex justify-between mb-1"><label className="text-sm font-medium text-gray-700">3. 电压增益 (Gain)</label><span className="text-sm font-mono text-green-600 bg-green-50 px-2 rounded">{values.gain.toFixed(1)}x</span></div>
+                        <input type="range" min={MIN_GAIN} max={MAX_GAIN} step={0.1} value={values.gain} onChange={(e) => onChange('gain', parseFloat(e.target.value))} className="friendly-range w-full" />
+                    </div>
+                </div>
+            </div>
+        );
+
+        const StandardControlItem = ({ label, value, min, max, step, onChange, unit }) => (
+            <div className="flex flex-col gap-1 mb-4">
+                <div className="flex justify-between text-xs font-bold text-gray-600 uppercase">
+                    <label>{label}</label>
+                    <span className="font-mono">{value.toFixed(2)}{unit}</span>
+                </div>
+                <input type="range" min={min} max={max} step={step} value={value} onChange={onChange} className="std-range h-4 w-full" />
+            </div>
+        );
+
+        const StandardView = ({ state, data, diagnostic, onControlChange }) => {
+            return (
+                <div className="max-w-6xl mx-auto bg-white border border-gray-400 shadow-xl p-8 font-serif text-gray-900">
+                    <div className="border-b-2 border-black pb-4 mb-6 flex flex-col md:flex-row justify-between items-end gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold uppercase tracking-widest text-black">单管共射放大电路</h2>
+                            <p className="text-xs font-mono text-gray-500 mt-1">虚拟仿真实验室: EIE-LAB-2024</p>
+                        </div>
+                        <div className="text-right">
+                             <div className={`text-sm font-bold font-mono border px-3 py-1 ${diagnostic.stdColor}`}>
+                                状态: {diagnostic.message}
+                             </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                        <div className="md:col-span-8 space-y-8">
+                            <div className="border border-gray-300 p-4 relative">
+                                <h4 className="absolute top-0 left-0 bg-gray-100 text-xs font-bold px-2 py-1 border-r border-b border-gray-300">图 1. 输入信号 $v_i(t)$</h4>
+                                <div className="h-[200px] mt-4">
+                                    <ResponsiveContainer>
+                                        <LineChart data={data}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis dataKey="time" hide />
+                                            <YAxis label={{ value: '电压 (V)', angle: -90, position: 'insideLeft', style: {fontSize: 10} }} domain={[-2.5, 2.5]} tick={{fontSize: 10}} width={40} />
+                                            <Tooltip contentStyle={{ fontSize: '12px', border: '1px solid #ccc' }} formatter={(val) => val.toFixed(3) + ' V'} labelStyle={{display:'none'}} />
+                                            <ReferenceLine y={0} stroke="#9ca3af" />
+                                            <Line type="monotone" dataKey="vin" stroke="#d97706" dot={false} strokeWidth={2} isAnimationActive={false} name="输入 Vin" />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                            <div className="border border-gray-300 p-4 relative">
+                                <h4 className="absolute top-0 left-0 bg-gray-100 text-xs font-bold px-2 py-1 border-r border-b border-gray-300">图 2. 输出信号 $v_o(t)$</h4>
+                                <div className="h-[250px] mt-4">
+                                    <ResponsiveContainer>
+                                        <LineChart data={data}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis dataKey="time" hide />
+                                            <YAxis label={{ value: '电压 (V)', angle: -90, position: 'insideLeft', style: {fontSize: 10} }} domain={[-1, 13]} ticks={[0, 3, 6, 9, 12]} tick={{fontSize: 10}} width={40} />
+                                            <Tooltip contentStyle={{ fontSize: '12px', border: '1px solid #ccc' }} formatter={(val) => val.toFixed(2) + ' V'} labelStyle={{display:'none'}} />
+                                            <ReferenceLine y={12} stroke="red" strokeDasharray="5 5" label={{ value: 'Vcc (12V)', fontSize: 10, fill: 'red', position: 'insideTopRight' }} />
+                                            <ReferenceLine y={0} stroke="red" strokeDasharray="5 5" label={{ value: 'GND (0V)', fontSize: 10, fill: 'red', position: 'insideBottomRight' }} />
+                                            <ReferenceLine y={state.bias} stroke="blue" strokeDasharray="2 2" label={{ value: 'Q点', fontSize: 10, fill: 'blue', position: 'insideLeft' }} />
+                                            <Line type="monotone" dataKey="vout" stroke="#16a34a" dot={false} strokeWidth={2} isAnimationActive={false} name="输出 Vout" />
+                                            {(diagnostic.type !== DistortionType.None) && (
+                                                <Line type="monotone" dataKey="vout_raw" stroke="#ff0000" strokeOpacity={0.2} dot={false} strokeDasharray="3 3" strokeWidth={1} isAnimationActive={false} name="理想波形" />
+                                            )}
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="md:col-span-4 bg-gray-50 p-6 border border-gray-300">
+                            <h3 className="font-bold border-b border-gray-300 pb-2 mb-6 text-sm uppercase">电路参数设置</h3>
+                            <StandardControlItem label="偏置电压 (V_bias)" value={state.bias} min={MIN_BIAS} max={MAX_BIAS} step={0.1} onChange={(e) => onControlChange('bias', parseFloat(e.target.value))} unit=" V"/>
+                            <StandardControlItem label="输入信号幅度 (V_in)" value={state.amplitude} min={MIN_AMP} max={MAX_AMP} step={0.05} onChange={(e) => onControlChange('amplitude', parseFloat(e.target.value))} unit=" V"/>
+                            <StandardControlItem label="电压增益 (Av)" value={state.gain} min={MIN_GAIN} max={MAX_GAIN} step={0.1} onChange={(e) => onControlChange('gain', parseFloat(e.target.value))} unit=" x"/>
+                            <div className="mt-8 pt-4 border-t border-gray-300 text-xs text-gray-500 font-mono space-y-2">
+                                <p><strong>电路规格参数:</strong></p>
+                                <p>类型: 共射极放大电路 (NPN)</p>
+                                <p>电源 Vcc: 12.0V</p>
+                                <p>相位差: 180° (反相)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const FriendlyView = ({ state, data, diagnostic, onControlChange }) => {
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+                    <div className="lg:col-span-3 order-3 lg:order-1"><GuidePanel /></div>
+                    <div className="lg:col-span-9 order-1 lg:order-2 flex flex-col gap-6">
+                        <DiagnosticPanel status={diagnostic} />
+                        <div className="relative">
+                            <div className="absolute -top-3 left-4 bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-sm z-10 font-mono">示波器 OSCILLOSCOPE</div>
+                            <FriendlyOscilloscope data={data} />
+                        </div>
+                        <div className="mt-2"><FriendlyControl values={state} onChange={onControlChange} /></div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [mode, setMode] = useState('friendly');
+            const [state, setState] = useState({ bias: 10, amplitude: 1.0, gain: 3.0 });
+            const handleControlChange = (key, value) => { setState(prev => ({ ...prev, [key]: value })); };
+            const { data, diagnostic } = useSimulation(state);
+
+            return (
+                <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+                    <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm z-50">
+                        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-blue-600 rounded-lg text-white">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">单管共射放大电路仿真</h1>
+                                    <p className="text-xs text-gray-500">Virtual Electronics Lab v2.0</p>
+                                </div>
+                            </div>
+                            <div className="flex bg-gray-100 p-1 rounded-lg">
+                                <button onClick={() => setMode('friendly')} className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mode === 'friendly' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>🌱 新手引导模式</button>
+                                <button onClick={() => setMode('standard')} className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${mode === 'standard' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>📐 标准仿真模式</button>
+                            </div>
+                        </div>
+                    </header>
+                    
+                    {/* --- Insert Real Scene Image Component Here --- */}
+                    <RealLabScene />
+                    
+                    <main className="flex-grow p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+                        {mode === 'friendly' ? (
+                            <FriendlyView state={state} data={data} diagnostic={diagnostic} onControlChange={handleControlChange} />
+                        ) : (
+                            <StandardView state={state} data={data} diagnostic={diagnostic} onControlChange={handleControlChange} />
+                        )}
+                    </main>
+
+                    <footer className="bg-white border-t border-gray-200 py-6 text-center text-sm text-gray-500">
+                        <p>&copy; {new Date().getFullYear()} 电子工程系 | <span className="font-mono">单管共射放大电路虚拟仿真实验系统</span></p>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
