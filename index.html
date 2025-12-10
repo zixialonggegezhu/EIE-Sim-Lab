@@ -182,7 +182,6 @@
             const [isOpen, setIsOpen] = useState(false); 
 
             return (
-                // 修正：确保这里使用 w-full 且类名与下方组件完全一致
                 <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-6 w-full">
                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                         <button 
@@ -207,12 +206,122 @@
             );
         };
 
+        // --- Component: Principle Animation ---
+        const PrincipleAnimation = () => {
+            const [time, setTime] = useState(0);
+            
+            useEffect(() => {
+                let animationFrameId;
+                const animate = () => {
+                    setTime(t => t + 0.01); // Slowed down from 0.05 to 0.01 for better visibility
+                    animationFrameId = requestAnimationFrame(animate);
+                };
+                animate();
+                return () => cancelAnimationFrame(animationFrameId);
+            }, []);
+
+            // Generate wave path
+            const generateWavePath = (xOffset, yOffset, width, amp, phase) => {
+                const points = [];
+                const freq = 0.05; 
+                const speed = 3; // Slowed down multiplier from 5 to 3
+                
+                for (let x = 0; x <= width; x += 5) {
+                    const angle = (x * freq) + (time * speed) + phase;
+                    const y = yOffset + Math.sin(angle) * amp;
+                    points.push(`${x + xOffset},${y}`);
+                }
+                return `M ${points[0]} L ${points.slice(1).join(' ')}`;
+            };
+
+            // Dynamic logic for the "Valve" visual
+            const currentSignal = Math.sin(time * 3); // Slowed down frequency multiplier from 5 to 3
+
+            return (
+                <div className="bg-slate-900 rounded-xl p-4 md:p-6 mb-6 shadow-inner border border-slate-700 text-slate-100 overflow-hidden">
+                    <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-2">
+                        <h4 className="font-bold text-lg flex items-center gap-2 text-yellow-400">
+                            <span className="text-2xl">🎬</span> 原理科普动画：信号放大的秘密
+                        </h4>
+                        <div className="text-xs bg-slate-800 px-3 py-1 rounded-full border border-slate-600 text-gray-300">
+                           核心机制：小电流控制大电流
+                        </div>
+                    </div>
+
+                    <div className="relative w-full h-[240px] select-none">
+                        <svg className="w-full h-full" viewBox="0 0 800 240" preserveAspectRatio="xMidYMid meet">
+                            <defs>
+                                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                    <feGaussianBlur stdDeviation="2" result="blur" />
+                                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                </filter>
+                                <marker id="arrow-head" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                    <path d="M0,0 L0,6 L9,3 z" fill="#6b7280" />
+                                </marker>
+                            </defs>
+
+                            {/* 1. INPUT STAGE (Left) */}
+                            <g transform="translate(50, 120)">
+                                <text x="50" y="-50" fill="#fcd34d" fontSize="14" fontWeight="bold" textAnchor="middle">输入信号 (Vin)</text>
+                                <text x="50" y="-35" fill="#9ca3af" fontSize="10" textAnchor="middle">微弱波动</text>
+                                <line x1="0" y1="0" x2="100" y2="0" stroke="#4b5563" strokeWidth="2" />
+                                <path d={generateWavePath(0, 0, 100, 10, 0)} stroke="#fcd34d" strokeWidth="3" fill="none" />
+                            </g>
+
+                            {/* 2. TRANSISTOR STAGE (Center) */}
+                            <g transform="translate(250, 120)">
+                                <line x1="0" y1="-80" x2="0" y2="-20" stroke="#ef4444" strokeWidth="4" opacity="0.5" /> {/* VCC Line */}
+                                <line x1="0" y1="20" x2="0" y2="80" stroke="#3b82f6" strokeWidth="4" opacity="0.5" /> {/* GND Line */}
+                                
+                                {/* Transistor Symbol */}
+                                <circle cx="0" cy="0" r="30" fill="#1f2937" stroke="#6b7280" strokeWidth="2" />
+                                
+                                {/* Base connection */}
+                                <line x1="-100" y1="0" x2="-30" y2="0" stroke="#fcd34d" strokeWidth="2" strokeDasharray="4 2" />
+
+                                {/* Dynamic Current Flow (Collector to Emitter) - The "Valve" effect */}
+                                <line x1="0" y1="-30" x2="0" y2="30" stroke="#fff" strokeWidth={Math.max(1, 10 + currentSignal * 8)} strokeLinecap="round" style={{transition: 'stroke-width 0.1s'}} />
+                                
+                                <text x="0" y="-90" fill="#ef4444" fontSize="12" fontWeight="bold" textAnchor="middle">VCC (12V)</text>
+                                <text x="0" y="100" fill="#3b82f6" fontSize="12" fontWeight="bold" textAnchor="middle">GND (0V)</text>
+                                <text x="0" y="5" fill="#fff" fontSize="10" textAnchor="middle" pointerEvents="none" style={{mixBlendMode: 'difference'}}>三极管 (阀门)</text>
+                            </g>
+
+                            {/* 3. OUTPUT STAGE (Right) */}
+                            <g transform="translate(350, 120)">
+                                <text x="150" y="-50" fill="#4ade80" fontSize="14" fontWeight="bold" textAnchor="middle">输出信号 (Vout)</text>
+                                <text x="150" y="-35" fill="#9ca3af" fontSize="10" textAnchor="middle">大幅度反相波动</text>
+                                
+                                <line x1="-100" y1="-40" x2="0" y2="-40" stroke="#4b5563" strokeWidth="2" strokeDasharray="4 4" />
+                                <circle cx="-100" cy="-40" r="4" fill="#ef4444" /> {/* Collector Node */}
+
+                                {/* Output Wave - Green, Inverted, Larger */}
+                                <path d={generateWavePath(0, 0, 300, 40, Math.PI)} stroke="#4ade80" strokeWidth="4" fill="none" filter="url(#glow)" />
+                            </g>
+
+                             {/* Logic Arrows */}
+                            <g opacity="0.7">
+                                <path d="M 160 110 L 190 110" stroke="#fcd34d" strokeWidth="2" markerEnd="url(#arrow-head)" />
+                                <text x="175" y="105" fill="#fcd34d" fontSize="10" textAnchor="middle">控制</text>
+                            </g>
+                        </svg>
+                        
+                        {/* Status Legend */}
+                        <div className="absolute bottom-2 right-4 text-right pointer-events-none">
+                             <div className="text-xl md:text-2xl font-mono font-bold text-white transition-all duration-100" style={{opacity: 0.9, textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
+                                {currentSignal > 0.5 ? "🌊 阀门大开 (大电流)" : currentSignal < -0.5 ? "🛑 阀门关小 (小电流)" : "⚖️ 平衡状态 (静态)"}
+                             </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Component: Experiment Principle (Aligned) ---
         const ExperimentPrinciple = () => {
             const [isOpen, setIsOpen] = useState(false); 
 
             return (
-                // 修正：确保这里使用 w-full 且类名与上方组件完全一致
                 <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-4 w-full">
                     <div className="bg-white border border-blue-100 rounded-xl shadow-sm overflow-hidden">
                         <button 
@@ -231,9 +340,12 @@
 
                         <div className={`collapse-content bg-white px-6 py-2 ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                             <div className="prose max-w-none py-4 text-slate-700">
+                                {/* Animation Component Inserted Here */}
+                                <PrincipleAnimation />
+
                                 <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-100 text-sm">
-                                    <p className="font-bold text-yellow-800">💡 核心原理：三极管就是一个“魔法可变电阻”</p>
-                                    <p className="mt-1">这个电路本质上是一个<b>串联分压电路</b>（高中物理 I=U/R）。三极管在电路中相当于一个阻值会随信号变化的“可变电阻”。</p>
+                                    <p className="font-bold text-yellow-800">💡 核心原理总结</p>
+                                    <p className="mt-1">这个电路本质上是一个<b>串联分压电路</b>。三极管在电路中相当于一个阻值会随信号变化的“可变电阻”。</p>
                                 </div>
 
                                 <div className="grid md:grid-cols-2 gap-8">
