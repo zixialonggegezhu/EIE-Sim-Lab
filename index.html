@@ -177,15 +177,14 @@
             }, [state]);
         }
 
-        // --- NEW COMPONENT: Real Lab Scene Image ---
-        // ⚠️ 请确保你的图片命名为 lab_scene.jpg 并且放在同一个文件夹下
+        // --- Component: Real Lab Scene Image (Aligned) ---
         const RealLabScene = () => {
-            const [isOpen, setIsOpen] = useState(false); // 默认折叠，改为 true 则默认展开
+            const [isOpen, setIsOpen] = useState(false); 
 
             return (
-                <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-6">
+                // 修正：确保这里使用 w-full 且类名与下方组件完全一致
+                <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-6 w-full">
                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                        {/* Title Bar (Clickable) */}
                         <button 
                             onClick={() => setIsOpen(!isOpen)}
                             className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
@@ -197,32 +196,91 @@
                                     {isOpen ? '收起' : '展开查看'}
                                 </span>
                             </div>
-                            {/* Arrow Icon */}
-                            <svg 
-                                className={`w-5 h-5 text-gray-500 transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} 
-                                fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                            <svg className={`w-5 h-5 text-gray-500 transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                         </button>
 
-                        {/* Image Content (Collapsible) */}
-                        <div 
-                            className={`collapse-content bg-black flex justify-center items-center ${isOpen ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}
+                        <div className={`collapse-content bg-black flex justify-center items-center ${isOpen ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <img src="./lab_scene.jpg" alt="实验室真实操作场景" className="max-w-full h-auto object-contain max-h-[600px]" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div class="p-8 text-gray-400 text-center">❌ 图片加载失败<br/><span class="text-sm">请确认图片文件名为 <b>lab_scene.jpg</b> 且与html在同一目录</span></div>'; }}/>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Component: Experiment Principle (Aligned) ---
+        const ExperimentPrinciple = () => {
+            const [isOpen, setIsOpen] = useState(false); 
+
+            return (
+                // 修正：确保这里使用 w-full 且类名与上方组件完全一致
+                <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-4 w-full">
+                    <div className="bg-white border border-blue-100 rounded-xl shadow-sm overflow-hidden">
+                        <button 
+                            onClick={() => setIsOpen(!isOpen)}
+                            className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
                         >
-                            {/* 
-                                ⚠️ 这里引用的图片名为 lab_scene.jpg 
-                                如果你的图片是 png，请改为 lab_scene.png
-                            */}
-                            <img 
-                                src="./lab_scene.jpg" 
-                                alt="实验室真实操作场景" 
-                                className="max-w-full h-auto object-contain max-h-[600px]"
-                                onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    e.target.parentElement.innerHTML = '<div class="p-8 text-gray-400 text-center">❌ 图片加载失败<br/><span class="text-sm">请确认图片文件名为 <b>lab_scene.jpg</b> 且与html在同一目录</span></div>';
-                                }}
-                            />
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">📖</span>
+                                <span className="font-bold text-blue-900">本系统模拟实验的原理</span>
+                                <span className="text-xs text-blue-500 font-mono bg-blue-200 px-2 py-0.5 rounded">
+                                    {isOpen ? '收起' : '展开学习'}
+                                </span>
+                            </div>
+                            <svg className={`w-5 h-5 text-blue-500 transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+
+                        <div className={`collapse-content bg-white px-6 py-2 ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <div className="prose max-w-none py-4 text-slate-700">
+                                <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-100 text-sm">
+                                    <p className="font-bold text-yellow-800">💡 核心原理：三极管就是一个“魔法可变电阻”</p>
+                                    <p className="mt-1">这个电路本质上是一个<b>串联分压电路</b>（高中物理 I=U/R）。三极管在电路中相当于一个阻值会随信号变化的“可变电阻”。</p>
+                                </div>
+
+                                <div className="grid md:grid-cols-2 gap-8">
+                                    <div>
+                                        <h4 className="font-bold text-gray-900 text-lg mb-3">1. 三个滑块代表什么？</h4>
+                                        <ul className="space-y-4">
+                                            <li className="flex gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-sm shrink-0">Bias</div>
+                                                <div>
+                                                    <span className="font-bold text-gray-900">偏置电压 (静态位置)</span>
+                                                    <p className="text-sm text-gray-600">这是波形的“平衡位置”。想象一下，为了让你在房间里上下跳跃不撞头也不撞地，最好的起始位置是站在房间的正中间 (6V)。</p>
+                                                </div>
+                                            </li>
+                                            <li className="flex gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">Vin</div>
+                                                <div>
+                                                    <span className="font-bold text-gray-900">输入幅度 (跳跃高度)</span>
+                                                    <p className="text-sm text-gray-600">这是你的麦克风信号。信号越大，波形上下摆动的范围就越大。</p>
+                                                </div>
+                                            </li>
+                                            <li className="flex gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold text-sm shrink-0">Av</div>
+                                                <div>
+                                                    <span className="font-bold text-gray-900">电压增益 (放大倍数)</span>
+                                                    <p className="text-sm text-gray-600">这是系统的灵敏度。增益越大，输入信号微小的变化就会引起输出端巨大的波动。</p>
+                                                </div>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="font-bold text-gray-900 text-lg mb-3">2. 为什么会“削平” (失真)？</h4>
+                                        <div className="bg-slate-100 p-4 rounded-lg font-mono text-sm mb-4">
+                                            <div className="mb-2">公式：<span className="text-green-600 font-bold">输出</span> = <span className="text-purple-600 font-bold">偏置</span> ± (<span className="text-blue-600 font-bold">输入</span> × <span className="text-gray-600 font-bold">增益</span>)</div>
+                                            <div className="text-xs text-gray-500">*忽略反相负号，只看幅度</div>
+                                        </div>
+                                        <p className="text-sm text-gray-600 mb-2">无论你怎么算，电路的输出永远受限于电源电压：</p>
+                                        <ul className="list-disc pl-5 space-y-2 text-sm text-gray-700">
+                                            <li><span className="font-bold text-red-500">天花板 (12V)</span>：如果算出来的电压超过12V，波形顶部会被强行切平（<b>截止失真</b>）。</li>
+                                            <li><span className="font-bold text-red-500">地板 (0V)</span>：如果算出来的电压低于0V，波形底部会被强行切平（<b>饱和失真</b>）。</li>
+                                        </ul>
+                                        <div className="mt-4 p-3 border-l-4 border-green-500 bg-green-50 text-xs text-green-800">
+                                            <b>结论：</b>为了不失真，必须把偏置调在中间 (6V)，且增益和输入不能太大，防止撞到天花板或地板。
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -425,8 +483,9 @@
                         </div>
                     </header>
                     
-                    {/* --- Insert Real Scene Image Component Here --- */}
+                    {/* --- Images and Principles --- */}
                     <RealLabScene />
+                    <ExperimentPrinciple />
                     
                     <main className="flex-grow p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
                         {mode === 'friendly' ? (
